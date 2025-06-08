@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>📄 Divya Center</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mammoth/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #111;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+    h1 {
+      color: #0ff;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+    .container {
+      background-color: #222;
+      padding: 20px;
+      max-width: 900px;
+      width: 100%;
+      border-radius: 10px;
+      box-shadow: 0 0 15px #0ff;
+    }
+    input[type="file"] {
+      width: 100%;
+      margin-bottom: 15px;
+      cursor: pointer;
+    }
+    textarea {
+      width: 100%;
+      height: 350px;
+      margin-top: 15px;
+      padding: 10px;
+      font-size: 1em;
+      background: #111;
+      color: #0f0;
+      border: 1px solid #0ff;
+      border-radius: 5px;
+      resize: vertical;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+    }
+    button {
+      padding: 10px 15px;
+      margin-top: 10px;
+      margin-right: 10px;
+      font-size: 1em;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      background-color: #0ff;
+      color: #000;
+      user-select: none;
+      transition: background-color 0.3s ease;
+    }
+    button:hover {
+      background-color: #00cccc;
+    }
+    #status {
+      margin-top: 10px;
+      font-style: italic;
+      color: #ccc;
+      min-height: 24px;
+    }
+    .dark {
+      background-color: #fff;
+      color: #111;
+    }
+    .dark .container {
+      background-color: #f4f4f4;
+      color: #111;
+      box-shadow: 0 0 10px #aaa;
+    }
+    .dark textarea {
+      background: #fff;
+      color: #000;
+      border-color: #444;
+    }
+    .dark button {
+      background-color: #111;
+      color: #0ff;
+    }
+    .dark button:hover {
+      background-color: #333;
+    }
+  </style>
+</head>
+<body>
+  <h1>📄 Multi Image, PDF, DOCX & Excel to Text Editor</h1>
+  <div class="container">
+    <input type="file" accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx,.xlsm" id="fileInput" multiple>
+    <div>
+      <button onclick="extractAllText()">Extract Text</button>
+      <button onclick="copyText()">Copy</button>
+      <button onclick="clearText()">Clear</button>
+      <button onclick="downloadText()">Download</button>
+      <button onclick="toggleTheme()">Toggle Theme</button>
+    </div>
+    <textarea id="textOutput" placeholder="Extracted text will appear here..."></textarea>
+    <p id="status">Status: Waiting for input...</p>
+    <canvas id="pdfCanvas" style="display:none;"></canvas>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const textOutput = document.getElementById("textOutput");
+    const status = document.getElementById("status");
+    const pdfCanvas = document.getElementById("pdfCanvas");
+    const ctx = pdfCanvas.getContext("2d");
+
+    async function extractAllText() {
+      const files = fileInput.files;
+      if (!files.length) {
+        alert("Please select files to extract text from.");
+        return;
+      }
+
+      textOutput.value = "";
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        status.textContent = `Status: Processing file ${i + 1} of ${files.length} (${file.name})...`;
+
+        try {
+          const text = await extractTextFromFile(file);
+          textOutput.value += `--- Text from file: ${file.name} ---\n\n${text}\n\n`;
+        } catch (e) {
+          textOutput.value += `--- Error processing file: ${file.name} ---\n\n`;
+          console.error(e);
+        }
+      }
+      status.textContent = "Status: All files processed!";
+    }
+
+    function extractTextFromFile(file) {
+      return new Promise((resolve, reject) => {
+        const fileType = file.type;
+        const fileName = file.name.toLowerCase();
+
+        if (fileType === "application/pdf") {
+          const reader = new FileReader();
+          reader.onload = async function (e) {
+            try {
+              const pdf = await pdfjsLib.getDocument({ data: e.target.result }).promise;
+              let fullText = '';
+              for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                status.textContent = `Status: Rendering page ${pageNum} of ${pdf.numPages} (${file.name})...`;
+                const page = await pdf.getPage(pageNum);
+                const viewport = page.getViewport({ scale: 2 });
+                pdfCanvas.width = viewport.width;
+                pdfCanvas.height = viewport.height;
+
+                await page.render({ canvasContext: ctx, viewport }).promise;
+
+                const { data: { text } } = await Tesseract.recognize(pdfCanvas, 'eng', {
+                  logger: m => status.textContent = `Status: OCR on page ${pageNum} (${(m.progress * 100).toFixed(0)}%)`
+                });
+                fullText += `--- Page ${pageNum} ---\n${text}\n\n`;
+              }
+              resolve(fullText);
+            } catch (error) {
+              reject(error);
+            }
+          };
+          reader.readAsArrayBuffer(file);
+
+        } else if (fileType.startsWith("image/")) {
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            const img = new Image();
+            img.onload = function () {
+              pdfCanvas.width = img.width;
+              pdfCanvas.height = img.height;
+              ctx.drawImage(img, 0, 0);
+              Tesseract.recognize(pdfCanvas, 'eng', {
+                logger: m => status.textContent = `Status: OCR on image (${(m.progress * 100).toFixed(0)}%)`
+              }).then(({ data: { text } }) => resolve(text)).catch(err => reject(err));
+            };
+            img.onerror = () => reject(new Error("Image load error"));
+            img.src = e.target.result;
+          };
+          reader.readAsDataURL(file);
+
+        } else if (fileName.endsWith(".docx")) {
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            mammoth.extractRawText({ arrayBuffer: e.target.result })
+              .then(result => resolve(result.value))
+              .catch(err => reject(err));
+          };
+          reader.readAsArrayBuffer(file);
+
+        } else if (fileName.endsWith(".xlsx") || fileName.endsWith(".xlsm")) {
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            try {
+              const data = new Uint8Array(e.target.result);
+              const workbook = XLSX.read(data, { type: 'array' });
+              let text = '';
+              workbook.SheetNames.forEach(name => {
+                const sheet = workbook.Sheets[name];
+                const csv = XLSX.utils.sheet_to_csv(sheet);
+                text += `--- Sheet: ${name} ---\n${csv}\n\n`;
+              });
+              resolve(text);
+            } catch (err) {
+              console.error("Excel parsing error:", err);
+              reject("Could not parse Excel file.");
+            }
+          };
+          reader.readAsArrayBuffer(file);
+
+        } else {
+          reject(new Error("Unsupported file type: " + fileType));
+        }
+      });
+    }
+
+    function copyText() {
+      textOutput.select();
+      document.execCommand("copy");
+      status.textContent = "Status: Text copied to clipboard.";
+    }
+
+    function clearText() {
+      textOutput.value = "";
+      status.textContent = "Status: Text area cleared.";
+    }
+
+    function downloadText() {
+      const blob = new Blob([textOutput.value], { type: "text/plain" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "extracted-text.txt";
+      link.click();
+      status.textContent = "Status: Text downloaded.";
+    }
+
+    function toggleTheme() {
+      document.body.classList.toggle("dark");
+    }
+  </script>
+</body>
+</html>
