@@ -841,34 +841,53 @@
                 flex-direction: column; 
             }
             .sidebar {
-                width: 100%; 
-                max-height: 50vh; 
+                width: 100% !important; /* Ensure full width on mobile */
+                max-height: 60vh; /* Allow more space for categories */
                 overflow-y: auto;
                 position: static; 
                 box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                padding: 1.5rem 1rem !important; /* Ensure padding */
             }
-             .sidebar-toggle-btn { 
-                display: none; 
+            
+            /* Styles to ensure sidebar content is visible on mobile, even if .collapsed class is present */
+            .sidebar .sidebar-header h2,
+            .sidebar.collapsed .sidebar-header h2 {
+                display: inline-block; /* Or initial, or block as appropriate */
             }
-            .sidebar.collapsed { 
-                width: 100%;
-                padding: 1.5rem 1rem; 
+            .sidebar .category-toggle span:not(.category-icon),
+            .sidebar.collapsed .category-toggle span:not(.category-icon) {
+                display: inline-block;
             }
-            .sidebar.collapsed .sidebar-header h2,
-            .sidebar.collapsed .category-toggle span:not(.category-icon),
-            .sidebar.collapsed .tool-list,
-            .sidebar.collapsed .toggle-arrow,
+            .sidebar .tool-list,
+            .sidebar.collapsed .tool-list { /* Crucial for tool list visibility control */
+                display: block !important; /* Overrides desktop display:none if .collapsed is present */
+                                     /* max-height is still controlled by .open class */
+            }
+            .sidebar .toggle-arrow,
+            .sidebar.collapsed .toggle-arrow {
+                display: inline-block;
+            }
+            .sidebar .tool-list a > *:not(i:first-child),
             .sidebar.collapsed .tool-list a > *:not(i:first-child) {
-                display: inline-block; 
+                display: inline-block;
             }
+
+            .sidebar .category-toggle,
             .sidebar.collapsed .category-toggle,
+            .sidebar .tool-list a,
             .sidebar.collapsed .tool-list a {
                 justify-content: flex-start; 
             }
-             .sidebar.collapsed .category-icon,
+            .sidebar .category-icon,
+            .sidebar.collapsed .category-icon,
+            .sidebar .tool-list a i:first-child,
             .sidebar.collapsed .tool-list a i:first-child {
                 margin-right: 0.75rem; 
             }
+            .sidebar .sidebar-toggle-btn { 
+                display: none !important; /* Hide desktop toggle button */
+            }
+
 
             .hero-section h2 {
                 font-size: 2.2rem;
@@ -1130,8 +1149,11 @@
         const hamburgerMenu = document.querySelector('.hamburger-menu');
         const navLinksContainer = document.querySelector('.navbar .nav-links');
         const mainNavLinks = document.querySelectorAll('.navbar .nav-links a');
+        const sidebar = document.querySelector('.sidebar');
+        const sidebarToggleBtn = document.querySelector('.sidebar-toggle-btn');
+        const categoryToggles = document.querySelectorAll('.category-toggle');
 
-        let currentToolCleanupFunction = null; // For tool-specific cleanup, e.g., stopping speech recognition
+        let currentToolCleanupFunction = null; 
 
         if (hamburgerMenu && navLinksContainer) {
             hamburgerMenu.addEventListener('click', () => {
@@ -1147,7 +1169,7 @@
             link.addEventListener('click', function(e) {
                 mainNavLinks.forEach(l => l.classList.remove('active'));
                 this.classList.add('active');
-                if (navLinksContainer.classList.contains('active')) {
+                if (navLinksContainer.classList.contains('active')) { // Close mobile nav if a link is clicked
                     navLinksContainer.classList.remove('active');
                     hamburgerMenu.querySelector('i').classList.remove('fa-times');
                     hamburgerMenu.querySelector('i').classList.add('fa-bars');
@@ -1164,7 +1186,7 @@
         });
         
         function onScroll() {
-            let currentSectionId = "home"; // Default to home
+            let currentSectionId = "home"; 
             const sections = document.querySelectorAll('main > section[id]');
             const scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
             const navBarHeight = document.querySelector('.navbar')?.offsetHeight || 60;
@@ -1186,32 +1208,60 @@
             });
         }
         window.addEventListener('scroll', onScroll);
-        onScroll(); 
+        onScroll(); // Initial call
 
-        const sidebar = document.querySelector('.sidebar');
-        const sidebarToggleBtn = document.querySelector('.sidebar-toggle-btn');
-        const categoryToggles = document.querySelectorAll('.category-toggle');
+        // --- Sidebar State Management ---
+        function handleSidebarState() {
+            if (!sidebar || !sidebarToggleBtn) {
+                console.warn("Sidebar or toggle button not found for state handling.");
+                return;
+            }
 
-        if (sidebarToggleBtn && sidebar) {
-             if (window.innerWidth > 768) { 
-                sidebarToggleBtn.addEventListener('click', () => {
-                    sidebar.classList.toggle('collapsed');
-                    localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
-                });
-                if (localStorage.getItem('sidebarCollapsed') === 'true') {
-                    sidebar.classList.add('collapsed');
-                }
-             } else { 
+            if (window.innerWidth <= 768) { // Mobile view
                 sidebar.classList.remove('collapsed');
                 sidebarToggleBtn.style.display = 'none';
-             }
-        } else {
-            console.warn("Sidebar or sidebar toggle button not found.");
+                // Ensure category toggles on mobile behave correctly regardless of previous desktop state
+                categoryToggles.forEach(toggle => {
+                    const toolList = toggle.nextElementSibling;
+                    if (toolList && toolList.classList.contains('tool-list') && toolList.classList.contains('open')) {
+                        // If it was open, ensure its max-height is set for mobile view
+                        toolList.style.maxHeight = toolList.scrollHeight + "px";
+                    }
+                });
+            } else { // Desktop view
+                sidebarToggleBtn.style.display = 'block'; // Or original display: 'inline-block', 'flex' etc.
+                if (localStorage.getItem('sidebarCollapsed') === 'true') {
+                    sidebar.classList.add('collapsed');
+                } else {
+                    sidebar.classList.remove('collapsed');
+                }
+            }
         }
+
+        if (sidebarToggleBtn && sidebar) {
+            sidebarToggleBtn.addEventListener('click', () => {
+                sidebar.classList.toggle('collapsed');
+                localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+                // If collapsing on desktop, close open tool lists
+                if (sidebar.classList.contains('collapsed')) {
+                    document.querySelectorAll('.sidebar .tool-list.open').forEach(list => {
+                        list.style.maxHeight = null;
+                        list.classList.remove('open');
+                        list.previousElementSibling.classList.remove('active'); // Deactivate toggle button
+                    });
+                }
+            });
+        }
+        
+        window.addEventListener('resize', handleSidebarState);
+        handleSidebarState(); // Initial call on page load
+
 
         categoryToggles.forEach(toggle => {
             toggle.addEventListener('click', () => {
+                // This condition correctly prevents toggling on desktop when sidebar is collapsed
                 if (sidebar.classList.contains('collapsed') && window.innerWidth > 768) return;
+                
                 toggle.classList.toggle('active');
                 const toolList = toggle.nextElementSibling;
                 if (toolList && toolList.classList.contains('tool-list')) {
@@ -1252,21 +1302,21 @@
         function openModal(toolId, toolName) {
             console.log(`Attempting to open modal for tool: ${toolId}, name: ${toolName}`);
             
-            if (currentToolCleanupFunction) { // Cleanup previous tool if any special cleanup was registered
+            if (currentToolCleanupFunction) { 
                 console.log("[Modal] Calling cleanup for previous tool.");
                 currentToolCleanupFunction();
                 currentToolCleanupFunction = null;
             }
-            clearCurrentToolIntervals(); // Clear any active setIntervals from previous tool
+            clearCurrentToolIntervals(); 
 
             modalToolTitle.textContent = toolName || "Tool";
             modalToolContent.innerHTML = '<p style="text-align:center; padding:2rem 0;">Loading tool...</p>';
             modalToolStatus.style.display = 'none';
             modalToolStatus.className = 'tool-status';
 
-            setTimeout(() => { // Ensure modal structure is in DOM before loading tool UI
+            setTimeout(() => { 
                 try {
-                    loadToolUI(toolId, toolName); // This might set a new currentToolCleanupFunction
+                    loadToolUI(toolId, toolName); 
                 } catch (error) {
                     console.error(`Error loading UI for ${toolId}:`, error);
                     modalToolContent.innerHTML = `<p style="color:red; text-align:center;">Error loading tool UI. Check console.</p>`;
@@ -1278,18 +1328,18 @@
         }
 
         function closeModal() {
-            if (currentToolCleanupFunction) { // Cleanup current tool if a cleanup function is registered
+            if (currentToolCleanupFunction) { 
                 console.log("[Modal] Calling cleanup for current tool before closing.");
                 currentToolCleanupFunction();
                 currentToolCleanupFunction = null;
             }
-            clearCurrentToolIntervals(); // Clear any active setIntervals
+            clearCurrentToolIntervals(); 
 
             modal.classList.remove('open');
             document.body.style.overflow = '';
             modalToolContent.innerHTML = ''; 
-            modalToolStatus.style.display = 'none'; // Hide status on close
-            modalToolStatus.className = 'tool-status'; // Reset status class
+            modalToolStatus.style.display = 'none'; 
+            modalToolStatus.className = 'tool-status'; 
         }
 
         modalCloseBtn.addEventListener('click', closeModal);
@@ -1322,14 +1372,12 @@
             console.warn("No 'open tool' buttons found.");
         }
         
-
         function showStatus(message, type = 'processing', duration = 0) {
             modalToolStatus.textContent = message;
             modalToolStatus.className = 'tool-status ' + type;
             modalToolStatus.style.display = 'block';
             if (duration > 0) {
                 setTimeout(() => {
-                    // Only hide if the message is still the same, to avoid hiding a newer status message
                     if (modalToolStatus.textContent === message && modalToolStatus.classList.contains(type)) { 
                        modalToolStatus.style.display = 'none';
                     }
@@ -1387,7 +1435,7 @@
                 if(modalToolContent.firstChild?.textContent?.includes("Loading tool...")) { 
                     modalToolContent.innerHTML = `<p style="color:red; text-align:center;">Error initializing file upload for this tool. Essential elements missing.</p>`;
                 }
-                return { getFiles: () => [], processBtn: null, clearFiles: () => {} }; // Return a "safe" object
+                return { getFiles: () => [], processBtn: null, clearFiles: () => {} }; 
             }
             console.log("File handling elements found for", toolIdPrefix);
 
@@ -1425,7 +1473,7 @@
                     }
                     const textNode = document.createElement('span'); 
                     textNode.innerHTML = previewContent;
-                    fileElement.prepend(textNode); // Prepend so it appears before media controls
+                    fileElement.prepend(textNode); 
                     
                     previewArea.appendChild(fileElement);
                 });
@@ -1433,7 +1481,7 @@
             }
             
             function clearFiles() {
-                filesToProcess.forEach(file => { // Revoke object URLs for media files to free resources
+                filesToProcess.forEach(file => { 
                     if (file.type.startsWith('audio/') || file.type.startsWith('video/')) {
                         const mediaElements = previewArea.querySelectorAll(`audio[src^="blob:"], video[src^="blob:"]`);
                         mediaElements.forEach(el => URL.revokeObjectURL(el.src));
@@ -1442,7 +1490,7 @@
                 filesToProcess = [];
                 if(previewArea) previewArea.innerHTML = '';
                 if(processBtn) processBtn.style.display = 'none';
-                if(fileInput) fileInput.value = ''; // Reset file input
+                if(fileInput) fileInput.value = ''; 
             }
 
             dropArea.addEventListener('dragover', (e) => { e.preventDefault(); dropArea.classList.add('dragover'); });
@@ -1472,18 +1520,18 @@
                     }
                     simulateProcessing(currentToolName, () => {
                         const firstFileName = files[0].name.split('.')[0] || 'file';
-                        let outputExtension = 'zip'; // Default for multiple or unknown
+                        let outputExtension = 'zip'; 
                         if (!allowMultiple && currentToolId.includes('-to-')) {
                             const parts = currentToolId.split('-to-');
-                            if (parts.length > 1 && !parts[1].includes('pdf')) { // e.g. pdf-to-word
+                            if (parts.length > 1 && !parts[1].includes('pdf')) { 
                                 outputExtension = parts[1];
                                 if(outputExtension === 'ppt') outputExtension = 'pptx';
                                 if(outputExtension === 'excel') outputExtension = 'xlsx';
                                 if(outputExtension === 'word') outputExtension = 'docx';
-                            } else { // e.g., word-to-pdf
+                            } else { 
                                  outputExtension = 'pdf'; 
                             }
-                        } else if (!allowMultiple && currentToolId.endsWith('pdf')) { // e.g. compress-pdf, word-to-pdf, jpg-to-pdf
+                        } else if (!allowMultiple && currentToolId.endsWith('pdf')) { 
                             outputExtension = 'pdf';
                         } else if (currentToolId === 'merge-pdf') {
                             outputExtension = 'pdf';
@@ -1501,18 +1549,18 @@
         function hexToRgb(hex) {
             let r = 0, g = 0, b = 0;
             hex = String(hex).replace(/[^0-9a-f]/gi, '');
-            if (hex.length < 3) return null; // Invalid hex
+            if (hex.length < 3) return null; 
 
-            if (hex.length === 3) { // #RGB
+            if (hex.length === 3) { 
                 r = parseInt(hex[0] + hex[0], 16);
                 g = parseInt(hex[1] + hex[1], 16);
                 b = parseInt(hex[2] + hex[2], 16);
-            } else if (hex.length === 6) { // #RRGGBB
+            } else if (hex.length === 6) { 
                 r = parseInt(hex.substring(0, 2), 16);
                 g = parseInt(hex.substring(2, 4), 16);
                 b = parseInt(hex.substring(4, 6), 16);
-            } else { // Handle cases like #F00 which might come as #F00 from input type color
-                 if(hex.startsWith('#')) hex = hex.substring(1); // remove # if present
+            } else { 
+                 if(hex.startsWith('#')) hex = hex.substring(1); 
                  if (hex.length == 3) {
                     r = parseInt(hex[0] + hex[0], 16);
                     g = parseInt(hex[1] + hex[1], 16);
@@ -1535,7 +1583,7 @@
             let h, s, l = (max + min) / 2;
 
             if (max === min) {
-                h = s = 0; // achromatic
+                h = s = 0; 
             } else {
                 const d = max - min;
                 s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
@@ -1555,7 +1603,7 @@
         // --- END: COLOR CONVERSION HELPER FUNCTIONS ---
 
         // --- UNIT CONVERTER HELPER FUNCTION ---
-        function createOption(value, text) { // Moved here to be accessible by unit converter
+        function createOption(value, text) { 
             const option = document.createElement('option');
             option.value = value;
             option.textContent = text;
@@ -1564,8 +1612,8 @@
 
         function loadToolUI(toolId, toolName) {
             console.log(`Executing loadToolUI for: ${toolId} (${toolName})`);
-            modalToolContent.innerHTML = ''; // Clear previous content FIRST
-            currentToolCleanupFunction = null; // Reset cleanup function for the new tool
+            modalToolContent.innerHTML = ''; 
+            currentToolCleanupFunction = null; 
 
             switch (toolId) {
                 // PDF Input Tools
@@ -1658,7 +1706,7 @@
                                     const canvas = document.createElement('canvas');
                                     canvas.width = img.width; canvas.height = img.height;
                                     const ctx = canvas.getContext('2d');
-                                    if (targetType === 'image/jpeg' && (file.type === 'image/png' || file.type === 'image/gif')) { // Add white background for formats that support transparency
+                                    if (targetType === 'image/jpeg' && (file.type === 'image/png' || file.type === 'image/gif')) { 
                                         ctx.fillStyle = "#FFFFFF"; ctx.fillRect(0,0,canvas.width, canvas.height);
                                     }
                                     ctx.drawImage(img, 0, 0);
@@ -1666,7 +1714,7 @@
                                         if (blob) downloadFile(blob, `${file.name.split('.')[0]}_converted.${targetExt}`);
                                         else showStatus('Error converting image.', 'error', 3000);
                                         imgConverter.clearFiles();
-                                    }, targetType, 0.9); // Quality 0.9 for JPEG/WEBP, ignored for PNG/GIF/BMP
+                                    }, targetType, 0.9); 
                                 };
                                 img.onerror = () => { showStatus('Could not load image.', 'error', 3000); imgConverter.clearFiles(); }
                                 img.src = e.target.result;
@@ -1703,7 +1751,7 @@
                             qrCodeOutput.innerHTML = '<small>Error generating QR. Try again.</small>';
                             showStatus('Failed to generate QR.', 'error', 4000);
                         }
-                        // Using a reliable QR code API
+                        
                         qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(text)}&format=svg&color=42f8f5&bgcolor=0d0f14&qzone=1`;
                         qrImg.style.maxWidth = "200px"; qrImg.style.maxHeight = "200px";
                         qrImg.style.border = "2px solid var(--accent-cyan)";
@@ -1751,7 +1799,6 @@
                         let password = guaranteedChars;
                         for (let i = guaranteedChars.length; i < length; i++) password += charset.charAt(Math.floor(Math.random() * charset.length));
                         
-                        // Shuffle the password to ensure guaranteed characters are not always at the start
                         password = password.split('').sort(() => 0.5 - Math.random()).join(''); 
                         
                         generatedPasswordInput.value = password; copyPassBtn.style.display = 'block'; showStatus("Password Generated!", 'success', 2000);
@@ -1762,7 +1809,7 @@
                             .then(() => showStatus('Password copied!', 'success', 2000))
                             .catch(err => showStatus('Failed to copy.', 'error', 2000));
                     };
-                    generatePassword(); // Generate one on load
+                    generatePassword(); 
                     break;
                 
                 case 'text-to-speech':
@@ -1809,19 +1856,19 @@
                     speakBtn.onclick = () => {
                         const text = ttsText.value.trim();
                         if (!text) { showStatus('Please enter text to speak.', 'error', 3000); return; }
-                        if (speechSynthesis.speaking) speechSynthesis.cancel(); // Stop any previous speech
+                        if (speechSynthesis.speaking) speechSynthesis.cancel(); 
                         
                         currentUtterance = new SpeechSynthesisUtterance(text);
                         if (ttsVoiceSelect.selectedOptions.length > 0) { 
                             const selectedVoiceName = ttsVoiceSelect.selectedOptions[0].getAttribute('data-name');
                             currentUtterance.voice = voices.find(voice => voice.name === selectedVoiceName);
-                        } else if (voices.length > 0) { // Fallback if no voice selected (shouldn't happen with default)
+                        } else if (voices.length > 0) { 
                             currentUtterance.voice = voices[0];
                         }
                         currentUtterance.onstart = () => showStatus('Speaking...', 'processing');
                         currentUtterance.onend = () => {
                             showStatus('Finished speaking.', 'success', 3000);
-                            currentUtterance = null; // Clear utterance after it ends
+                            currentUtterance = null; 
                         }
                         currentUtterance.onerror = (e) => {
                             showStatus(`Speech error: ${e.error}`, 'error', 4000);
@@ -1834,9 +1881,9 @@
                             speechSynthesis.cancel(); 
                             showStatus('Speech stopped.', 'success', 2000);
                         }
-                        currentUtterance = null; // Also clear if stopped manually
+                        currentUtterance = null; 
                     };
-                    currentToolCleanupFunction = () => { // Cleanup for Text-to-Speech
+                    currentToolCleanupFunction = () => { 
                         if (speechSynthesis && speechSynthesis.speaking) {
                             speechSynthesis.cancel();
                         }
@@ -1868,7 +1915,7 @@
                         wcWords.textContent = text.trim() ? text.trim().split(/\s+/).length : 0;
                         wcChars.textContent = text.length;
                         wcCharsNoSpace.textContent = text.replace(/\s/g, '').length;
-                        // Improved sentence and paragraph counting
+                        
                         wcSentences.textContent = text.trim() ? (text.match(/[^.!?]+[.!?]+(\s|$)/g) || []).length || (text.trim() && 1) : 0;
                         wcParagraphs.textContent = text.trim() ? text.split(/\n\s*\n/).filter(p => p.trim() !== "").length || (text.trim() && 1) : 0;
                     };
@@ -1922,10 +1969,10 @@
                             emiTenureYearsEl.focus(); return;
                         }
 
-                        const r = (annualRate / 12) / 100; // Monthly interest rate
-                        const n = tenureYears * 12; // Loan tenure in months
+                        const r = (annualRate / 12) / 100; 
+                        const n = tenureYears * 12; 
 
-                        if (r === 0) { // Handle 0% interest rate
+                        if (r === 0) { 
                             const emi = P / n;
                             emiValueEl.textContent = `₹ ${emi.toFixed(2)}`;
                             totalInterestValueEl.textContent = `₹ 0.00`;
@@ -2013,13 +2060,13 @@
                         let hours = Math.floor(totalSeconds / 3600);
                         let minutes = Math.floor((totalSeconds % 3600) / 60);
                         let seconds = totalSeconds % 60;
-                        let milliseconds = Math.floor((ms % 1000) / 10); // Display centiseconds (2 digits)
+                        let milliseconds = Math.floor((ms % 1000) / 10); 
                         return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}` +
                                (includeMs ? `.${String(milliseconds).padStart(2, '0')}` : '');
                     }
                     swStartBtn.onclick = () => {
                         swStartTime = Date.now() - swElapsedTime; 
-                        swLapStartTime = swLapStartTime === 0 ? swStartTime : Date.now() - (swElapsedTime - (swLaps.reduce((acc, lap) => acc + lap.rawTime, 0) || 0)); // Adjust lap start time
+                        swLapStartTime = swLapStartTime === 0 ? swStartTime : Date.now() - (swElapsedTime - (swLaps.reduce((acc, lap) => acc + lap.rawTime, 0) || 0)); 
                         
                         swInterval = setInterval(() => { swElapsedTime = Date.now() - swStartTime; swDisplay.textContent = formatTime(swElapsedTime); }, 10);
                         currentToolIntervals.push(swInterval);
@@ -2040,7 +2087,7 @@
                         const li = document.createElement('li'); 
                         li.textContent = `Lap ${swLaps.length}: ${swLaps[swLaps.length - 1].time}`;
                         swLapsList.prepend(li); 
-                        // swLapStartTime is managed relative to swElapsedTime in start
+                        
                     };
                     
                     const timerHoursInput = document.getElementById(`timerHours-${toolId}`);
@@ -2058,7 +2105,7 @@
                         const h = Math.max(0, parseInt(timerHoursInput.value) || 0); 
                         const m = Math.max(0, Math.min(59, parseInt(timerMinutesInput.value) || 0)); 
                         const s = Math.max(0, Math.min(59, parseInt(timerSecondsInput.value) || 0));
-                        timerHoursInput.value = h; timerMinutesInput.value = m; timerSecondsInput.value = s; // Normalize input values
+                        timerHoursInput.value = h; timerMinutesInput.value = m; timerSecondsInput.value = s; 
                         initialTimerDurationMs = (h * 3600 + m * 60 + s) * 1000;
                         return initialTimerDurationMs;
                     }
@@ -2070,12 +2117,12 @@
                     }
 
                     [timerHoursInput, timerMinutesInput, timerSecondsInput].forEach(input => input.oninput = resetTimerState);
-                    resetTimerState(); // Call on load
+                    resetTimerState(); 
 
                     timerStartBtn.onclick = () => {
-                        if (timerRemainingMs <= 0) { // If timer was at 0, reset it from inputs
+                        if (timerRemainingMs <= 0) { 
                             resetTimerState();
-                            if (timerRemainingMs <= 0) { // If still 0 after reset from inputs
+                            if (timerRemainingMs <= 0) { 
                                 showStatus("Set a positive duration for the timer.", 'error', 3000); return; 
                             }
                         }
@@ -2085,13 +2132,13 @@
                             updateTimerDisplay();
                             if (timerRemainingMs <= 0) {
                                 clearInterval(timerInterval); 
-                                showStatus('Timer Finished!', 'success', 5000); // Use showStatus
+                                showStatus('Timer Finished!', 'success', 5000); 
                                 try {
-                                    new Audio('https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3').play(); // Example sound
+                                    new Audio('https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3').play(); 
                                 } catch(e) { console.warn("Could not play timer sound", e)}
                                 resetTimerState();
                             }
-                        }, 200); // Update display more frequently for smoother countdown
+                        }, 200); 
                         currentToolIntervals.push(timerInterval);
                         timerStartBtn.style.display = 'none'; timerPauseBtn.style.display = 'inline-block';
                         [timerHoursInput, timerMinutesInput, timerSecondsInput].forEach(inp => inp.disabled = true);
@@ -2099,7 +2146,7 @@
                     timerPauseBtn.onclick = () => {
                         clearInterval(timerInterval); 
                         timerStartBtn.style.display = 'inline-block'; timerPauseBtn.style.display = 'none';
-                        // Keep inputs disabled to resume from paused state
+                        
                     };
                     timerResetBtn.onclick = () => {
                         clearInterval(timerInterval); 
@@ -2149,7 +2196,7 @@
                     const totalMinutesOutput = document.getElementById(`totalMinutes-${toolId}`);
                     const nextBirthdayOutput = document.getElementById(`nextBirthday-${toolId}`);
 
-                    // Set default "Age at Date of" to today and max for DoB to today
+                    
                     const today = new Date();
                     const todayString = today.toISOString().split('T')[0];
                     ageAtDateInput.value = todayString;
@@ -2163,7 +2210,7 @@
                         if (!dobString) { showStatus("Please select your Date of Birth.", 'error', 3000); dobInput.focus(); return; }
                         if (!ageAtDateString) { showStatus("Please select the 'Age at Date of'.", 'error', 3000); ageAtDateInput.focus(); return; }
 
-                        const dob = new Date(dobString + "T00:00:00"); // Ensure time is start of day
+                        const dob = new Date(dobString + "T00:00:00"); 
                         const ageAtDate = new Date(ageAtDateString + "T00:00:00");
 
                         if (dob > ageAtDate) { showStatus("Date of Birth cannot be after the 'Age at Date of'.", 'error', 4000); ageResultsEl.style.display = 'none'; return; }
@@ -2174,7 +2221,7 @@
 
                         if (days < 0) {
                             months--;
-                            // Get days in previous month of ageAtDate
+                            
                             days += new Date(ageAtDate.getFullYear(), ageAtDate.getMonth(), 0).getDate();
                         }
                         if (months < 0) { years--; months += 12; }
@@ -2193,15 +2240,8 @@
                         let nextBdayYear = ageAtDate.getFullYear();
                         let nextBday = new Date(nextBdayYear, dob.getMonth(), dob.getDate());
                         
-                        // If birthday this year has passed or is today, check next year
-                        if (nextBday.getTime() < ageAtDate.getTime() || (nextBday.getTime() === ageAtDate.getTime() && dob.getDate() === ageAtDate.getDate() && (dob.getMonth() === ageAtDate.getMonth() && dob.getFullYear() !== ageAtDate.getFullYear()) )) {
-                             // This condition handles if it IS the birthday today
-                            if (dob.getMonth() === ageAtDate.getMonth() && dob.getDate() === ageAtDate.getDate()){
-                                // it's their birthday today!
-                            } else {
-                                nextBday.setFullYear(nextBdayYear + 1);
-                            }
-                        } else if (nextBday.getTime() < ageAtDate.getTime()) {
+                        
+                        if (nextBday.getTime() < ageAtDate.getTime() || (nextBday.getTime() === ageAtDate.getTime() && !(dob.getMonth() === ageAtDate.getMonth() && dob.getDate() === ageAtDate.getDate()) )) {
                              nextBday.setFullYear(nextBdayYear + 1);
                         }
 
@@ -2274,7 +2314,7 @@
                             const targetQuality = videoQualitySelect.value;
                             
                             simulateProcessing(toolName, () => {
-                                // Keep original extension or use mp4 as a common fallback
+                                
                                 const originalExtension = file.name.substring(file.name.lastIndexOf('.') + 1) || 'mp4';
                                 const outputFileName = `${file.name.substring(0, file.name.lastIndexOf('.')) || file.name}_compressed_${targetQuality}.${originalExtension}`;
                                 const fakeBlob = new Blob([`Simulated compressed video data (${targetQuality} quality) for ${file.name}`], { type: file.type || 'video/mp4' });
@@ -2340,7 +2380,7 @@
                     colorInput.addEventListener('input', (event) => {
                         updateColorValues(event.target.value);
                     });
-                    updateColorValues(colorInput.value); // Initial update
+                    updateColorValues(colorInput.value); 
 
                     const copyButtons = modalToolContent.querySelectorAll('.copy-color-btn');
                     copyButtons.forEach(button => {
@@ -2376,7 +2416,7 @@
                             foot:       { factor: 0.3048, display: "Foot (ft)" },
                             inch:       { factor: 0.0254, display: "Inch (in)" }
                         },
-                        weight: { // Base: Kilogram
+                        weight: { 
                             kilogram:   { factor: 1, display: "Kilogram (kg)" },
                             gram:       { factor: 0.001, display: "Gram (g)" },
                             milligram:  { factor: 0.000001, display: "Milligram (mg)" },
@@ -2384,12 +2424,12 @@
                             ounce:      { factor: 0.0283495231, display: "Ounce (oz)" },
                             tonne:      { factor: 1000, display: "Tonne (t)"}
                         },
-                        temperature: { // Base for temperature is Celsius for internal calculation
+                        temperature: { 
                             celsius:    { toBase: (c) => c, fromBase: (base) => base, display: "Celsius (°C)" },
                             fahrenheit: { toBase: (f) => (f - 32) * 5/9, fromBase: (base) => (base * 9/5) + 32, display: "Fahrenheit (°F)" },
                             kelvin:     { toBase: (k) => k - 273.15, fromBase: (base) => base + 273.15, display: "Kelvin (K)" }
                         },
-                        area: { // Base: Square Meter
+                        area: { 
                             sqMeter:    { factor: 1, display: "Square Meter (m²)"},
                             sqKilometer:{ factor: 1000000, display: "Square Kilometer (km²)"},
                             sqCentimeter:{ factor: 0.0001, display: "Square Centimeter (cm²)"},
@@ -2399,11 +2439,11 @@
                             acre:       { factor: 4046.8564224, display: "Acre (ac)"},
                             hectare:    { factor: 10000, display: "Hectare (ha)"}
                         },
-                        volume: { // Base: Liter
+                        volume: { 
                             liter:      { factor: 1, display: "Liter (L)"},
                             milliliter: { factor: 0.001, display: "Milliliter (mL)"},
                             cubicMeter: { factor: 1000, display: "Cubic Meter (m³)"},
-                            cubicCentimeter: { factor: 0.001, display: "Cubic Centimeter (cm³)"}, // Same as mL
+                            cubicCentimeter: { factor: 0.001, display: "Cubic Centimeter (cm³)"}, 
                             gallonUS:   { factor: 3.785411784, display: "Gallon (US fluid)"},
                             quartUS:    { factor: 0.946352946, display: "Quart (US fluid)"},
                             pintUS:     { factor: 0.473176473, display: "Pint (US fluid)"},
@@ -2468,7 +2508,7 @@
                         }
                         if (count > 0) {
                             ucFromUnitSelect.selectedIndex = 0;
-                            ucToUnitSelect.selectedIndex = Math.min(1, count - 1); // Select 2nd if available, else 1st
+                            ucToUnitSelect.selectedIndex = Math.min(1, count - 1); 
                         }
                     }
                     
@@ -2507,21 +2547,22 @@
                             const baseValue = fromUnitData.toBase(fromValue);
                             result = toUnitData.fromBase(baseValue);
                         } else {
-                            const baseValue = fromValue * fromUnitData.factor; // Convert to category's base unit
-                            result = baseValue / toUnitData.factor;     // Convert from base to target unit
+                            const baseValue = fromValue * fromUnitData.factor; 
+                            result = baseValue / toUnitData.factor;     
                         }
                         
-                        // Smart formatting for result
+                        
                         if (Math.abs(result) > 1e7 || (Math.abs(result) < 1e-5 && result !== 0)) {
                            ucToValueInput.value = result.toExponential(5);
                         } else {
                            let precision = 7;
-                           if (Math.abs(result) < 1) precision = Math.max(5, Math.min(10, -Math.floor(Math.log10(Math.abs(result))) + 4));
+                           if (Math.abs(result) < 1 && result !== 0) precision = Math.max(5, Math.min(10, -Math.floor(Math.log10(Math.abs(result))) + 4));
+                           else if (result === 0) precision = 0; // Show 0 as 0, not 0.0000000
                            ucToValueInput.value = parseFloat(result.toFixed(precision));
                         }
 
 
-                        // Update formula display
+                        
                         if (fromUnitKey !== toUnitKey && !isNaN(fromValue) && fromValue !== 0) {
                             let conversionRate;
                             if (category === 'temperature') {
@@ -2561,9 +2602,9 @@
 
                     populateUcCategorySelect();
                     if (ucCategorySelect.options.length > 0) {
-                        ucCategorySelect.value = ucCategorySelect.options[0].value; // Default to first category
+                        ucCategorySelect.value = ucCategorySelect.options[0].value; 
                         populateUcUnitSelects(ucCategorySelect.value);
-                        performUcConversion(); // Initial conversion if any default value in input
+                        performUcConversion(); 
                     }
                     break; 
 
@@ -2587,7 +2628,6 @@
                                 <option value="ru-RU">Русский (Россия)</option>
                                 <option value="hi-IN">हिन्दी (भारत)</option>
                                 <option value="ar-SA">العربية (السعودية)</option>
-                                <!-- Add more languages as needed -->
                             </select>
                         </div>
                         <div class="tool-input-group">
@@ -2620,13 +2660,13 @@
                         sttStatusEl.innerHTML = '<span style="color:red;">Speech Recognition API not supported in this browser. Try Chrome or Edge.</span>';
                         sttStartBtnEl.disabled = true;
                         if (sttCopyBtn) sttCopyBtn.disabled = true;
-                        modalToolStatus.style.display = 'none'; // Ensure main modal status is hidden
+                        modalToolStatus.style.display = 'none'; 
                         break; 
                     }
 
                     recognition = new SpeechRecognition();
-                    recognition.continuous = true; // Keep listening even after pauses
-                    recognition.interimResults = true; // Get results as they come
+                    recognition.continuous = true; 
+                    recognition.interimResults = true; 
                     console.log('[STT] SpeechRecognition instance created.'); 
 
                     recognition.onstart = () => {
@@ -2636,13 +2676,13 @@
                         sttStartBtnEl.style.display = 'none';
                         sttStopBtnEl.style.display = 'block';
                         sttOutputTextareaEl.focus();
-                        showStatus('Listening...', 'processing'); // Use main modal status
+                        showStatus('Listening...', 'processing'); 
                     };
 
                     recognition.onresult = (event) => {
                         console.log('[STT] onresult event fired.', event); 
                         let interim_transcript = '';
-                        // currentFinalTranscript is reset at start, so just build from this event's final results
+                        
                         let latestFinalTranscriptPart = ''; 
                         for (let i = event.resultIndex; i < event.results.length; ++i) {
                             if (event.results[i].isFinal) {
@@ -2651,7 +2691,7 @@
                                 interim_transcript += event.results[i][0].transcript;
                             }
                         }
-                        currentFinalTranscript += latestFinalTranscriptPart; // Append new final parts
+                        currentFinalTranscript += latestFinalTranscriptPart; 
                         sttOutputTextareaEl.value = currentFinalTranscript + interim_transcript;
                         console.log('[STT] Interim: "' + interim_transcript + '", Current Final: "' + currentFinalTranscript + '"');
                     };
@@ -2698,8 +2738,8 @@
                         }
                         recognition.lang = sttLanguageSelectEl.value;
                         console.log('[STT] Language set to:', recognition.lang); 
-                        currentFinalTranscript = ''; // Reset transcript for new session
-                        sttOutputTextareaEl.value = ''; // Clear textarea for new session
+                        currentFinalTranscript = ''; 
+                        sttOutputTextareaEl.value = ''; 
 
                         try {
                             recognition.start();
@@ -2733,18 +2773,18 @@
                         };
                     }
                     
-                    // Set default language based on browser preference if available
+                    
                     const preferredLang = navigator.language || 'en-US';
                     if (Array.from(sttLanguageSelectEl.options).some(opt => opt.value === preferredLang)) {
                         sttLanguageSelectEl.value = preferredLang;
                     } else if (Array.from(sttLanguageSelectEl.options).some(opt => opt.value.startsWith(preferredLang.split('-')[0]))) {
                         const matchedOption = Array.from(sttLanguageSelectEl.options).find(opt => opt.value.startsWith(preferredLang.split('-')[0]));
                         if (matchedOption) sttLanguageSelectEl.value = matchedOption.value;
-                    } // else it defaults to en-US from HTML
+                    } 
                     
                     currentToolCleanupFunction = () => {
                         console.log('[STT] Cleanup function called.'); 
-                        if (recognition && isListening) { // Only stop if it's actually listening
+                        if (recognition && isListening) { 
                             console.log('[STT] Stopping active recognition during cleanup.'); 
                             recognition.onstart = null; 
                             recognition.onresult = null;
@@ -2752,7 +2792,7 @@
                             recognition.onerror = null;
                             recognition.stop();
                         }
-                        recognition = null; // Allow garbage collection
+                        recognition = null; 
                         isListening = false;
                         currentFinalTranscript = '';
                         console.log('[STT] Cleanup complete.'); 
@@ -2792,7 +2832,7 @@
                         }
                         try {
                             const parsedJson = JSON.parse(inputText);
-                            const formattedJson = JSON.stringify(parsedJson, null, 2); // 2 spaces for indentation
+                            const formattedJson = JSON.stringify(parsedJson, null, 2); 
                             jsonOutputEl.value = formattedJson;
                             copyJsonOutputBtnEl.style.display = 'block';
                             showStatus('JSON Formatted successfully!', 'success', 3000);
@@ -2813,7 +2853,7 @@
                         }
                         try {
                             const parsedJson = JSON.parse(inputText);
-                            const minifiedJson = JSON.stringify(parsedJson); // No indentation for minifying
+                            const minifiedJson = JSON.stringify(parsedJson); 
                             jsonOutputEl.value = minifiedJson;
                             copyJsonOutputBtnEl.style.display = 'block';
                             showStatus('JSON Minified successfully!', 'success', 3000);
